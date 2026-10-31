@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>登录 · 学生信息管理系统</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div class="login-wrap">
+    <form class="login-card" id="loginForm">
+      <div class="brand"><span class="logo">学</span>学生信息管理系统</div>
+      <h2>账号登录</h2>
+      <p class="sub">请使用学校分配的账号登录</p>
+
+      <label class="field">用户名
+        <input class="input" id="username" name="username" autocomplete="username" value="admin" />
+      </label>
+      <label class="field">密码
+        <input class="input" id="password" name="password" type="password" autocomplete="current-password" value="123456" />
+      </label>
+
+      <p class="login-err" id="err"></p>
+      <button class="btn btn-primary" type="submit" id="btnLogin">登 录</button>
+      <p class="hint">
+        演示账号：admin / 123456（管理员，全校数据）<br />
+        teacher / 123456（教师，仅本班数据）
+      </p>
+    </form>
+  </div>
+
+  <script type="module">
+    import { api, setToken, getToken } from './assets/js/api.js';
+
+    if (getToken()) location.replace('index.html');
+
+    const form = document.getElementById('loginForm');
+    const err = document.getElementById('err');
+    const btn = document.getElementById('btnLogin');
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      err.textContent = '';
+
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      if (!username || !password) {
+        err.textContent = '请输入用户名和密码';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = '登录中…';
+      try {
+        const data = await api.login(username, password);
+        setToken(data.token);
+        location.href = 'index.html';
+      } catch (e) {
+        err.textContent = e.message;
+        btn.disabled = false;
+        btn.textContent = '登 录';
+      }
+    });
+  </script>
+</body>
+</html>

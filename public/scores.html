@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>成绩管理 · 学生信息管理系统</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div id="shell"></div>
+
+  <div class="mask" id="scoreModal">
+    <div class="modal" style="max-width:560px">
+      <div class="modal-head">
+        <span id="modalTitle">录入成绩</span>
+        <button class="modal-close" data-close type="button">×</button>
+      </div>
+      <form id="scoreForm">
+        <div class="modal-body">
+          <label class="field">班级 *<select class="select" id="fClass"></select></label>
+          <label class="field">学生 *<select class="select" id="fStudent"></select></label>
+          <label class="field">课程 *<select class="select" id="fCourse"></select></label>
+          <label class="field">学期 *<select class="select" id="fTerm"></select></label>
+          <label class="field">考试类型 *<select class="select" id="fExam"><option>期末</option><option>平时</option><option>补考</option></select></label>
+          <label class="field">分数 *<input class="input" id="fScore" type="number" min="0" max="100" step="0.5" placeholder="0 ~ 100" /></label>
+          <p class="login-err" id="formErr" style="grid-column:1/-1"></p>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn" data-close>取消</button>
+          <button type="submit" class="btn btn-primary" id="btnSave">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireLogin } from './assets/js/auth.js';
+    import { api } from './assets/js/api.js';
+    import {
+      mountShell, $, $$, esc, toast, openModal, closeModal, bindMaskClose,
+      renderPager, renderBars, statCard, scoreClass, showError, fmtTime,
+    } from './assets/js/ui.js';
+
+    const user = await requireLogin();
+    const body = mountShell({ active: 'scores', title: '成绩管理', sub: '按班级、课程、学期筛选，录入后自动统计' });
+
+    body.innerHTML = `
+      <section class="stats-row" id="statCards"></section>
+      <div class="panel">
+        <div class="toolbar">
+          <select class="select" id="filterClass"><option value="">全部班级</option></select>
+          <select class="select" id="filterCourse"><option value="">全部课程</option></select>
+          <select class="select" id="filterTerm"><option value="">全部学期</option></select>
+          <button class="btn" id="btnSearch">查询</button>
+          <button class="btn" id="btnReset">重置</button>
+          <span class="spacer"></span>
+          <button class="btn btn-primary" id="btnAdd">+ 录入成绩</button>
+        </div>
+        <div class="table-wrap" id="tableWrap"><div class="loading">加载中…</div></div>
+        <div class="pager" id="pager"></div>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <div class="panel-head">分数段分布</div>
+        <div class="panel-body" id="distBars"></div>
+      </div>`;
+
+    const TERMS = ['2025-2026-2', '2026-2027-1'];
+    const state = { page: 1, pageSize: 20, classId: '', courseId: '', term: '', editingId: null };
+    let classes = [];
+    let courses = [];
+
+    async function loadOptions() {
+      [classes, courses] = await Promise.all([api.classes(), api.courses()]);
+      const usable = user.role === 'admin' ? classes : classes.filter((c) => c.id === user.class_id);
+
+      $('#filterClass').insertAdjacentHTML('beforeend',
+        usable.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join(''));
+      $('#filterCourse').insertAdjacentHTML('beforeend',
+        courses.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join(''));
+      $('#filterTerm').insertAdjacentHTML('beforeend',
+        TERMS.map((t) => `<option value="${t}">${t}</option>`).join(''));
+
+      $('#fClass').innerHTML = usable.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+      $('#fCourse').innerHTML = courses.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+      $('#fTerm').innerHTML = TERMS.map((t) => `<option value="${t}">${t}</option>`).join('');
+
+      if (user.role !== 'admin' && usable.length === 1) {
+        $('#filterClass').value = String(usable[0].id);
+        state.classId = String(usable[0].id);
+      }
+    }
+
+    async function loadStudentsOf(classId) {
+      const data = await api.students({ classId, pageSize: 100 });
+      $('#fStudent').innerHTML = data.list
+        .map((s) => `<option value="${s.id}">${esc(s.student_no)} ${esc(s.name)}</option>`)
+        .join('') || '<option value="">该班暂无学生</option>';
+    }
+
+    async function load() {
+      try {
+        const query = {
+          page: state.page, pageSize: state.pageSize,
+          classId: state.classId, courseId: state.courseId, term: state.term,
+        };
+        const [data, stats] = await Promise.all([api.scores(query), api.scoreStats(query)]);
+
+        $('#statCards').innerHTML = [
+          statCard('成绩记录', stats.total, '当前筛选条件'),
+          statCard('平均分', stats.avg, '满分 100'),
+          statCard('及格率', `${stats.passRate}%`, `及格 ${stats.total - stats.fail} 条`),
+          statCard('优秀人数', stats.excellent, '分数 ≥ 90'),
+        ].join('');
+        renderBars($('#distBars'), stats.distribution);
+
+        if (!data.list.length) {
+          $('#tableWrap').innerHTML = '<div class="empty">没有符合条件的成绩记录</div>';
+          renderPager($('#pager'), data, () => {});
+          return;
+        }
+
+        $('#tableWrap').innerHTML = `
+          <table>
+            <thead><tr>
+              <th>学号</th><th>姓名</th><th>班级</th><th>课程</th>
+              <th>学期</th><th>类型</th><th>分数</th><th>更新时间</th><th>操作</th>
+            </tr></thead>
+            <tbody>
+              ${data.list.map((r) => `
+                <tr>
+                  <td class="mono">${esc(r.student_no)}</td>
+                  <td>${esc(r.student_name)}</td>
+                  <td>${esc(r.class_name)}</td>
+                  <td>${esc(r.course_name)}</td>
+                  <td class="mono">${esc(r.term)}</td>
+                  <td>${esc(r.exam_type)}</td>
+                  <td class="num ${scoreClass(r.score)}">${esc(r.score)}</td>
+                  <td class="mono">${esc(fmtTime(r.updated_at))}</td>
+                  <td class="row-actions">
+                    <button class="btn-link" data-edit="${r.id}">改分</button>
+                    <button class="btn-link danger" data-del="${r.id}">删除</button>
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>`;
+
+        renderPager($('#pager'), data, (p) => { state.page = p; load(); });
+
+        $$('button[data-edit]', $('#tableWrap')).forEach((b) => b.addEventListener('click', () => {
+          const row = data.list.find((r) => r.id === Number(b.dataset.edit));
+          if (row) openEdit(row);
+        }));
+        $$('button[data-del]', $('#tableWrap')).forEach((b) => b.addEventListener('click', () => removeScore(b.dataset.del)));
+      } catch (e) {
+        showError($('#tableWrap'), e.message, load);
+      }
+    }
+
+    async function openCreate() {
+      state.editingId = null;
+      $('#modalTitle').textContent = '录入成绩';
+      $('#fExam').disabled = false;
+      $('#fClass').disabled = false;
+      $('#fStudent').disabled = false;
+      $('#fCourse').disabled = false;
+      $('#fTerm').disabled = false;
+      $('#fScore').value = '';
+      $('#formErr').textContent = '';
+      if (state.classId) $('#fClass').value = state.classId;
+      if (state.courseId) $('#fCourse').value = state.courseId;
+      if (state.term) $('#fTerm').value = state.term;
+      await loadStudentsOf($('#fClass').value);
+      openModal('scoreModal');
+    }
+
+    function openEdit(row) {
+      state.editingId = row.id;
+      $('#modalTitle').textContent = `修改分数 · ${row.student_name} / ${row.course_name}`;
+      $('#fClass').value = String(row.class_id);
+      $('#fStudent').innerHTML = `<option value="${row.student_id}">${esc(row.student_no)} ${esc(row.student_name)}</option>`;
+      $('#fCourse').value = String(row.course_id);
+      $('#fTerm').value = row.term;
+      $('#fExam').value = row.exam_type;
+      $('#fScore').value = row.score;
+      // 编辑时只允许改分数
+      ['fClass', 'fStudent', 'fCourse', 'fTerm', 'fExam'].forEach((id) => { $(`#${id}`).disabled = true; });
+      $('#formErr').textContent = '';
+      openModal('scoreModal');
+    }
+
+    async function removeScore(id) {
+      if (!confirm('确定删除这条成绩记录？')) return;
+      try {
+        await api.deleteScore(id);
+        toast('已删除');
+        load();
+      } catch (e) {
+        toast(e.message, 'err');
+      }
+    }
+
+    $('#fClass').addEventListener('change', async () => {
+      if (state.editingId) return;
+      try { await loadStudentsOf($('#fClass').value); } catch (e) { toast(e.message, 'err'); }
+    });
+
+    $('#btnSearch').addEventListener('click', () => {
+      state.classId = $('#filterClass').value;
+      state.courseId = $('#filterCourse').value;
+      state.term = $('#filterTerm').value;
+      state.page = 1;
+      load();
+    });
+
+    $('#btnReset').addEventListener('click', () => {
+      $('#filterClass').value = ''; $('#filterCourse').value = ''; $('#filterTerm').value = '';
+      Object.assign(state, { page: 1, classId: '', courseId: '', term: '' });
+      load();
+    });
+
+    $('#btnAdd').addEventListener('click', () => openCreate().catch((e) => toast(e.message, 'err')));
+
+    $('#scoreForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const err = $('#formErr');
+      err.textContent = '';
+      const score = Number($('#fScore').value);
+      if (Number.isNaN(score) || score < 0 || score > 100) {
+        err.textContent = '分数必须在 0 ~ 100 之间';
+        return;
+      }
+
+      const btn = $('#btnSave');
+      btn.disabled = true;
+      try {
+        if (state.editingId) {
+          await api.updateScore(state.editingId, { score });
+          toast('分数已更新');
+        } else {
+          await api.createScore({
+            student_id: Number($('#fStudent').value),
+            course_id: Number($('#fCourse').value),
+            term: $('#fTerm').value,
+            exam_type: $('#fExam').value,
+            score,
+          });
+          toast('录入成功');
+        }
+        closeModal('scoreModal');
+        load();
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    $$('[data-close]').forEach((b) => b.addEventListener('click', () => closeModal('scoreModal')));
+    bindMaskClose('scoreModal');
+
+    await loadOptions();
+    load();
+  </script>
+</body>
+</html>

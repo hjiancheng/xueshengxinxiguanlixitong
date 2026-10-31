@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>班级管理 · 学生信息管理系统</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div id="shell"></div>
+
+  <div class="mask" id="classModal">
+    <div class="modal" style="max-width:560px">
+      <div class="modal-head">
+        <span id="modalTitle">新增班级</span>
+        <button class="modal-close" data-close type="button">×</button>
+      </div>
+      <form id="classForm">
+        <div class="modal-body">
+          <label class="field">班级名称 *<input class="input" id="fName" placeholder="如 计算机 5 班" /></label>
+          <label class="field">所属院系 *<select class="select" id="fDept"></select></label>
+          <label class="field">年级 *<input class="input" id="fGrade" type="number" value="2023" /></label>
+          <label class="field">班主任<select class="select" id="fTeacher"><option value="">未指定</option></select></label>
+          <p class="login-err" id="formErr" style="grid-column:1/-1"></p>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn" data-close>取消</button>
+          <button type="submit" class="btn btn-primary" id="btnSave">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireLogin, isAdmin } from './assets/js/auth.js';
+    import { api } from './assets/js/api.js';
+    import {
+      mountShell, $, $$, esc, toast, openModal, closeModal, bindMaskClose, showError,
+    } from './assets/js/ui.js';
+
+    const user = await requireLogin();
+    const admin = isAdmin();
+    const body = mountShell({ active: 'classes', title: '班级管理', sub: '班级与院系归属、班主任指定' });
+
+    body.innerHTML = `
+      <div class="panel">
+        ${admin ? `<div class="toolbar">
+          <span class="hint-inline">班级是教师数据范围的依据，班主任变更会自动同步该教师的可见范围</span>
+          <span class="spacer"></span>
+          <button class="btn btn-primary" id="btnAdd">+ 新增班级</button>
+        </div>` : ''}
+        <div class="table-wrap" id="tableWrap"><div class="loading">加载中…</div></div>
+      </div>`;
+
+    let rows = [];
+
+    async function load() {
+      try {
+        rows = await api.classes();
+        if (!rows.length) {
+          $('#tableWrap').innerHTML = '<div class="empty">暂无班级</div>';
+          return;
+        }
+        $('#tableWrap').innerHTML = `
+          <table>
+            <thead><tr><th>班级</th><th>院系</th><th>年级</th><th>班主任</th><th>学生数</th>${admin ? '<th>操作</th>' : ''}</tr></thead>
+            <tbody>
+              ${rows.map((c) => `
+                <tr>
+                  <td>${esc(c.name)}</td>
+                  <td>${esc(c.department_name)}</td>
+                  <td class="num">${esc(c.grade_year)}</td>
+                  <td>${esc(c.head_teacher_name || '—')}</td>
+                  <td class="num">${esc(c.student_count)}</td>
+                  ${admin ? `<td class="row-actions">
+                    <button class="btn-link" data-edit="${c.id}">编辑</button>
+                    <button class="btn-link danger" data-del="${c.id}">删除</button>
+                  </td>` : ''}
+                </tr>`).join('')}
+            </tbody>
+          </table>`;
+
+        $$('button[data-edit]', $('#tableWrap')).forEach((b) => b.addEventListener('click', () => openEdit(Number(b.dataset.edit))));
+        $$('button[data-del]', $('#tableWrap')).forEach((b) => b.addEventListener('click', () => removeClass(Number(b.dataset.del))));
+      } catch (e) {
+        showError($('#tableWrap'), e.message, load);
+      }
+    }
+
+    async function loadOptions() {
+      const [depts, users] = await Promise.all([api.departments(), api.users()]);
+      $('#fDept').innerHTML = depts.map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+      $('#fTeacher').innerHTML = '<option value="">未指定</option>' + users
+        .filter((u) => u.role === 'teacher')
+        .map((u) => `<option value="${u.id}">${esc(u.real_name)}（${esc(u.username)}）</option>`)
+        .join('');
+    }
+
+    function openEdit(id) {
+      const c = rows.find((r) => r.id === id);
+      if (!c) return;
+      $('#modalTitle').textContent = `编辑班级 · ${c.name}`;
+      $('#fName').value = c.name;
+      $('#fDept').value = String(c.department_id);
+      $('#fGrade').value = c.grade_year;
+      $('#fTeacher').value = c.head_teacher_id ? String(c.head_teacher_id) : '';
+      $('#formErr').textContent = '';
+      $('#classForm').dataset.id = String(id);
+      openModal('classModal');
+    }
+
+    async function removeClass(id) {
+      if (!confirm('确定删除该班级？')) return;
+      try {
+        await api.deleteClass(id);
+        toast('已删除');
+        load();
+      } catch (e) {
+        toast(e.message, 'err');
+      }
+    }
+
+    $('#btnAdd')?.addEventListener('click', () => {
+      if (!admin) return;
+      $('#modalTitle').textContent = '新增班级';
+      $('#fName').value = '';
+      $('#fGrade').value = 2023;
+      $('#fTeacher').value = '';
+      $('#formErr').textContent = '';
+      delete $('#classForm').dataset.id;
+      openModal('classModal');
+    });
+
+    $('#classForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const err = $('#formErr');
+      err.textContent = '';
+
+      const payload = {
+        name: $('#fName').value.trim(),
+        department_id: Number($('#fDept').value),
+        grade_year: Number($('#fGrade').value),
+        head_teacher_id: $('#fTeacher').value ? Number($('#fTeacher').value) : null,
+      };
+      if (!payload.name) { err.textContent = '班级名称必填'; return; }
+      if (!Number.isInteger(payload.grade_year)) { err.textContent = '年级必须是整数'; return; }
+
+      const btn = $('#btnSave');
+      btn.disabled = true;
+      try {
+        const id = $('#classForm').dataset.id;
+        if (id) {
+          await api.updateClass(Number(id), payload);
+          toast('保存成功');
+        } else {
+          await api.createClass(payload);
+          toast('新增成功');
+        }
+        closeModal('classModal');
+        load();
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    $$('[data-close]').forEach((b) => b.addEventListener('click', () => closeModal('classModal')));
+    bindMaskClose('classModal');
+
+    if (admin) await loadOptions();
+    load();
+  </script>
+</body>
+</html>

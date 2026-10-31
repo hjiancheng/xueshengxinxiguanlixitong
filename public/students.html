@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>学生管理 · 学生信息管理系统</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div id="shell"></div>
+
+  <!-- 新增 / 编辑 -->
+  <div class="mask" id="studentModal">
+    <div class="modal" style="max-width:620px">
+      <div class="modal-head">
+        <span id="modalTitle">新增学生</span>
+        <button class="modal-close" data-close type="button">×</button>
+      </div>
+      <form id="studentForm">
+        <div class="modal-body">
+          <label class="field">学号 *<input class="input" id="fStudentNo" placeholder="如 20230001" /></label>
+          <label class="field">姓名 *<input class="input" id="fName" placeholder="如 张三" /></label>
+          <label class="field">性别 *<select class="select" id="fGender"><option>男</option><option>女</option></select></label>
+          <label class="field">班级 *<select class="select" id="fClass"></select></label>
+          <label class="field">出生日期<input class="input" id="fBirth" type="date" /></label>
+          <label class="field">联系电话<input class="input" id="fPhone" maxlength="20" /></label>
+          <label class="field">邮箱<input class="input" id="fEmail" maxlength="100" /></label>
+          <label class="field">入学年份 *<input class="input" id="fYear" type="number" value="2023" /></label>
+          <label class="field">学籍状态<select class="select" id="fStatus"><option>在读</option><option>休学</option><option>毕业</option></select></label>
+          <p class="login-err" id="formErr" style="grid-column:1/-1"></p>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn" data-close>取消</button>
+          <button type="submit" class="btn btn-primary" id="btnSave">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 详情 -->
+  <div class="mask" id="detailModal">
+    <div class="modal" style="max-width:640px">
+      <div class="modal-head">
+        <span>学生详情</span>
+        <button class="modal-close" data-close type="button">×</button>
+      </div>
+      <div class="modal-body" style="display:block">
+        <div id="detailBody"><div class="loading">加载中…</div></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireLogin } from './assets/js/auth.js';
+    import { api, downloadStudentsCsv } from './assets/js/api.js';
+    import {
+      mountShell, $, $$, esc, toast, openModal, closeModal, bindMaskClose,
+      statusBadge, renderPager, showError,
+    } from './assets/js/ui.js';
+
+    const user = await requireLogin();
+    const body = mountShell({ active: 'students', title: '学生管理', sub: '档案的查询、录入、修改与导出' });
+
+    body.innerHTML = `
+      <div class="panel">
+        <div class="toolbar">
+          <input class="input" id="kw" placeholder="搜索姓名 / 学号" style="width:200px" />
+          <select class="select" id="filterClass"><option value="">全部班级</option></select>
+          <select class="select" id="filterStatus">
+            <option value="">全部状态</option><option>在读</option><option>休学</option><option>毕业</option>
+          </select>
+          <button class="btn" id="btnSearch">查询</button>
+          <button class="btn" id="btnReset">重置</button>
+          <span class="spacer"></span>
+          <button class="btn" id="btnExport">导出 CSV</button>
+          <button class="btn btn-primary" id="btnAdd">+ 新增学生</button>
+        </div>
+        <div class="table-wrap" id="tableWrap"><div class="loading">加载中…</div></div>
+        <div class="pager" id="pager"></div>
+      </div>`;
+
+    const state = { page: 1, pageSize: 10, keyword: '', classId: '', status: '', editingId: null };
+    let classes = [];
+
+    // 班级下拉（教师只能选自己的班）
+    async function loadClasses() {
+      classes = await api.classes();
+      const usable = user.role === 'admin' ? classes : classes.filter((c) => c.id === user.class_id);
+      const options = usable.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+      $('#filterClass').insertAdjacentHTML('beforeend', options);
+      $('#fClass').innerHTML = options;
+      if (user.role !== 'admin' && usable.length === 1) $('#filterClass').value = String(usable[0].id);
+    }
+
+    async function load() {
+      try {
+        const data = await api.students({
+          page: state.page, pageSize: state.pageSize,
+          keyword: state.keyword, classId: state.classId, status: state.status,
+        });
+        renderTable(data);
+        renderPager($('#pager'), data, (p) => { state.page = p; load(); });
+      } catch (e) {
+        showError($('#tableWrap'), e.message, load);
+      }
+    }
+
+    function renderTable(data) {
+      if (!data.list.length) {
+        $('#tableWrap').innerHTML = '<div class="empty">没有符合条件的学生</div>';
+        return;
+      }
+      $('#tableWrap').innerHTML = `
+        <table>
+          <thead>
+            <tr><th>学号</th><th>姓名</th><th>性别</th><th>班级</th><th>联系电话</th><th>入学年份</th><th>状态</th><th>操作</th></tr>
+          </thead>
+          <tbody>
+            ${data.list.map((s) => `
+              <tr>
+                <td class="mono">${esc(s.student_no)}</td>
+                <td>${esc(s.name)}</td>
+                <td>${esc(s.gender)}</td>
+                <td>${esc(s.class_name)}</td>
+                <td>${esc(s.phone || '—')}</td>
+                <td class="num">${esc(s.enroll_year)}</td>
+                <td>${statusBadge(s.status)}</td>
+                <td class="row-actions">
+                  <button class="btn-link" data-view="${s.id}">查看</button>
+                  <button class="btn-link" data-edit="${s.id}">编辑</button>
+                  <button class="btn-link danger" data-del="${s.id}">删除</button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+
+      $$('button[data-view]', $('#tableWrap')).forEach((b) => b.addEventListener('click', () => showDetail(b.dataset.view)));
+      $$('button[data-edit]', $('#tableWrap')).forEach((b) => b.addEventListener('click', () => openEdit(b.dataset.edit)));
+      $$('button[data-del]', $('#tableWrap')).forEach((b) => b.addEventListener('click', () => removeStudent(b.dataset.del)));
+    }
+
+    function fillForm(student) {
+      $('#fStudentNo').value = student?.student_no ?? '';
+      $('#fName').value = student?.name ?? '';
+      $('#fGender').value = student?.gender ?? '男';
+      $('#fClass').value = String(student?.class_id ?? (classes[0]?.id ?? ''));
+      $('#fBirth').value = student?.birth_date ?? '';
+      $('#fPhone').value = student?.phone ?? '';
+      $('#fEmail').value = student?.email ?? '';
+      $('#fYear').value = student?.enroll_year ?? 2023;
+      $('#fStatus').value = student?.status ?? '在读';
+      $('#formErr').textContent = '';
+    }
+
+    async function openEdit(id) {
+      try {
+        const student = await api.student(id);
+        state.editingId = student.id;
+        $('#modalTitle').textContent = `编辑学生 · ${student.name}`;
+        fillForm(student);
+        openModal('studentModal');
+      } catch (e) {
+        toast(e.message, 'err');
+      }
+    }
+
+    async function showDetail(id) {
+      openModal('detailModal');
+      const box = $('#detailBody');
+      box.innerHTML = '<div class="loading">加载中…</div>';
+      try {
+        const s = await api.student(id);
+        const scoreRows = s.scores.length
+          ? s.scores.map((sc) => `
+              <tr>
+                <td>${esc(sc.course_name)}</td>
+                <td>${esc(sc.term)}</td>
+                <td>${esc(sc.exam_type)}</td>
+                <td class="${Number(sc.score) < 60 ? 'score-fail' : ''}">${esc(sc.score)}</td>
+              </tr>`).join('')
+          : '<tr><td colspan="4" class="hint-inline">暂无成绩记录</td></tr>';
+
+        box.innerHTML = `
+          <dl class="kv">
+            <dt>学号</dt><dd>${esc(s.student_no)}</dd>
+            <dt>姓名</dt><dd>${esc(s.name)}（${esc(s.gender)}）</dd>
+            <dt>班级</dt><dd>${esc(s.class_name)} · ${esc(s.department_name)}</dd>
+            <dt>出生日期</dt><dd>${esc(s.birth_date || '—')}</dd>
+            <dt>联系电话</dt><dd>${esc(s.phone || '—')}</dd>
+            <dt>邮箱</dt><dd>${esc(s.email || '—')}</dd>
+            <dt>学籍状态</dt><dd>${statusBadge(s.status)}</dd>
+          </dl>
+          <h3 style="font-size:14px;margin:18px 0 8px">成绩记录</h3>
+          <table>
+            <thead><tr><th>课程</th><th>学期</th><th>类型</th><th>分数</th></tr></thead>
+            <tbody>${scoreRows}</tbody>
+          </table>`;
+      } catch (e) {
+        box.innerHTML = `<div class="err-box">${esc(e.message)}</div>`;
+      }
+    }
+
+    async function removeStudent(id) {
+      if (!confirm('确定删除该学生？删除后列表不再显示（数据保留在库中）。')) return;
+      try {
+        await api.deleteStudent(id);
+        toast('已删除');
+        load();
+      } catch (e) {
+        toast(e.message, 'err');
+      }
+    }
+
+    // 事件绑定
+    $('#btnSearch').addEventListener('click', () => {
+      state.keyword = $('#kw').value.trim();
+      state.classId = $('#filterClass').value;
+      state.status = $('#filterStatus').value;
+      state.page = 1;
+      load();
+    });
+    $('#kw').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btnSearch').click(); });
+    $('#btnReset').addEventListener('click', () => {
+      $('#kw').value = ''; $('#filterClass').value = ''; $('#filterStatus').value = '';
+      Object.assign(state, { page: 1, keyword: '', classId: '', status: '' });
+      load();
+    });
+    $('#btnAdd').addEventListener('click', () => {
+      state.editingId = null;
+      $('#modalTitle').textContent = '新增学生';
+      fillForm(null);
+      openModal('studentModal');
+    });
+    $('#btnExport').addEventListener('click', async () => {
+      try {
+        await downloadStudentsCsv({
+          keyword: state.keyword, classId: state.classId, status: state.status,
+        });
+        toast('导出完成');
+      } catch (e) {
+        toast(e.message, 'err');
+      }
+    });
+
+    $('#studentForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const err = $('#formErr');
+      err.textContent = '';
+
+      const payload = {
+        student_no: $('#fStudentNo').value.trim(),
+        name: $('#fName').value.trim(),
+        gender: $('#fGender').value,
+        class_id: Number($('#fClass').value),
+        birth_date: $('#fBirth').value || null,
+        phone: $('#fPhone').value.trim() || null,
+        email: $('#fEmail').value.trim() || null,
+        enroll_year: Number($('#fYear').value),
+        status: $('#fStatus').value,
+      };
+
+      if (!payload.student_no || !payload.name) { err.textContent = '学号和姓名必填'; return; }
+      if (!payload.class_id) { err.textContent = '请选择班级'; return; }
+      if (!Number.isInteger(payload.enroll_year)) { err.textContent = '入学年份必须是整数'; return; }
+
+      const btn = $('#btnSave');
+      btn.disabled = true;
+      try {
+        if (state.editingId) {
+          await api.updateStudent(state.editingId, payload);
+          toast('保存成功');
+        } else {
+          await api.createStudent(payload);
+          toast('新增成功');
+        }
+        closeModal('studentModal');
+        load();
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    $$('[data-close]').forEach((b) => b.addEventListener('click', () => {
+      closeModal('studentModal');
+      closeModal('detailModal');
+    }));
+    bindMaskClose('studentModal');
+    bindMaskClose('detailModal');
+
+    await loadClasses();
+    load();
+  </script>
+</body>
+</html>

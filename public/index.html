@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>仪表盘 · 学生信息管理系统</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div id="shell"></div>
+
+  <script type="module">
+    import { requireLogin } from './assets/js/auth.js';
+    import { api } from './assets/js/api.js';
+    import {
+      mountShell, $, esc, statCard, renderBars, fmtTime, showError, ACTION_LABEL,
+    } from './assets/js/ui.js';
+
+    const user = await requireLogin();
+    const now = new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16);
+    const body = mountShell({
+      active: 'index',
+      title: '数据概览',
+      sub: `当前范围：${esc(user.scope)} · 数据更新于 ${now}`,
+    });
+
+    body.innerHTML = `
+      <section class="cards" id="cards"><div class="loading">加载中…</div></section>
+      <div class="grid2">
+        <div class="panel">
+          <div class="panel-head">各班级人数</div>
+          <div class="panel-body" id="classBars"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">成绩分段分布</div>
+          <div class="panel-body" id="scoreBars"></div>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <div class="panel-head">最近操作</div>
+        <div class="table-wrap" id="logs"></div>
+      </div>`;
+
+    async function load() {
+      try {
+        const data = await api.overview();
+
+        $('#cards').innerHTML = [
+          statCard('学生总数', data.studentCount, `覆盖 ${data.classCount} 个班级`),
+          statCard('班级数', data.classCount, user.role === 'admin' ? '全校口径' : '本班口径'),
+          statCard('平均分', data.avgScore, `共 ${data.totalScores} 条成绩`),
+          statCard('及格率', `${data.passRate}%`, '分数 ≥ 60 占比'),
+        ].join('');
+
+        renderBars($('#classBars'), data.classDistribution);
+        renderBars($('#scoreBars'), data.scoreDistribution);
+
+        if (!data.recentLogs.length) {
+          $('#logs').innerHTML = '<div class="empty">暂无操作记录</div>';
+        } else {
+          $('#logs').innerHTML = `
+            <table>
+              <thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>对象</th></tr></thead>
+              <tbody>
+                ${data.recentLogs.map((log) => `
+                  <tr>
+                    <td class="mono">${esc(fmtTime(log.created_at))}</td>
+                    <td>${esc(log.username)}</td>
+                    <td>${esc(ACTION_LABEL[log.action] || log.action)}</td>
+                    <td>${esc(log.entity)}${log.entity_id ? ` #${esc(log.entity_id)}` : ''}</td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>`;
+        }
+      } catch (e) {
+        showError($('#cards'), e.message, load);
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>

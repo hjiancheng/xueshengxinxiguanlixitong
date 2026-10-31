@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>操作日志 · 学生信息管理系统</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div id="shell"></div>
+
+  <script type="module">
+    import { requireLogin, isAdmin } from './assets/js/auth.js';
+    import { api } from './assets/js/api.js';
+    import {
+      mountShell, $, esc, renderPager, fmtTime, showError,
+      ACTION_LABEL, ENTITY_LABEL,
+    } from './assets/js/ui.js';
+
+    await requireLogin();
+    if (!isAdmin()) {
+      document.body.innerHTML = '<div class="empty">操作日志仅管理员可查看</div>';
+      throw new Error('forbidden');
+    }
+
+    const body = mountShell({ active: 'audit', title: '操作日志', sub: '谁在什么时候改了什么，全部留痕' });
+
+    body.innerHTML = `
+      <div class="panel">
+        <div class="toolbar">
+          <select class="select" id="filterAction">
+            <option value="">全部动作</option>
+            ${Object.entries(ACTION_LABEL).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}
+          </select>
+          <select class="select" id="filterEntity">
+            <option value="">全部对象</option>
+            ${Object.entries(ENTITY_LABEL).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}
+          </select>
+          <button class="btn" id="btnSearch">查询</button>
+          <button class="btn" id="btnReset">重置</button>
+        </div>
+        <div class="table-wrap" id="tableWrap"><div class="loading">加载中…</div></div>
+        <div class="pager" id="pager"></div>
+      </div>`;
+
+    const state = { page: 1, pageSize: 20, action: '', entity: '' };
+
+    function detailText(detail) {
+      if (!detail) return '—';
+      const text = typeof detail === 'string' ? detail : JSON.stringify(detail);
+      return text.length > 60 ? `${text.slice(0, 60)}…` : text;
+    }
+
+    async function load() {
+      try {
+        const data = await api.auditLogs({
+          page: state.page, pageSize: state.pageSize,
+          action: state.action, entity: state.entity,
+        });
+
+        if (!data.list.length) {
+          $('#tableWrap').innerHTML = '<div class="empty">暂无日志</div>';
+          renderPager($('#pager'), data, () => {});
+          return;
+        }
+
+        $('#tableWrap').innerHTML = `
+          <table>
+            <thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>对象</th><th>详情</th><th>IP</th></tr></thead>
+            <tbody>
+              ${data.list.map((log) => `
+                <tr>
+                  <td class="mono">${esc(fmtTime(log.created_at))}</td>
+                  <td>${esc(log.username)}</td>
+                  <td><span class="badge ${log.action === 'delete' ? 'warn' : 'gray'}">${esc(ACTION_LABEL[log.action] || log.action)}</span></td>
+                  <td>${esc(ENTITY_LABEL[log.entity] || log.entity)}${log.entity_id ? ` #${esc(log.entity_id)}` : ''}</td>
+                  <td class="mono-sm" title="${esc(typeof log.detail === 'string' ? log.detail : JSON.stringify(log.detail ?? ''))}">${esc(detailText(log.detail))}</td>
+                  <td class="mono-sm">${esc(log.ip || '—')}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>`;
+
+        renderPager($('#pager'), data, (p) => { state.page = p; load(); });
+      } catch (e) {
+        showError($('#tableWrap'), e.message, load);
+      }
+    }
+
+    $('#btnSearch').addEventListener('click', () => {
+      state.action = $('#filterAction').value;
+      state.entity = $('#filterEntity').value;
+      state.page = 1;
+      load();
+    });
+    $('#btnReset').addEventListener('click', () => {
+      $('#filterAction').value = ''; $('#filterEntity').value = '';
+      Object.assign(state, { page: 1, action: '', entity: '' });
+      load();
+    });
+
+    load();
+  </script>
+</body>
+</html>

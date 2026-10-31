@@ -1,0 +1,22 @@
+{
+  "name": "student-info-management",
+  "version": "0.1.0",
+  "private": true,
+  "description": "学生信息管理系统 · 课程作业/毕业设计级演示项目",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "seed": "node server/db/seed.js",
+    "test": "node --test test/api.test.mjs",
+    "check:syntax": "node scripts/check-syntax.mjs",
+    "check:ui": "node scripts/browser-check.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

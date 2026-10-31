@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>课程管理 · 学生信息管理系统</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div id="shell"></div>
+
+  <div class="mask" id="courseModal">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-head">
+        <span id="modalTitle">新增课程</span>
+        <button class="modal-close" data-close type="button">×</button>
+      </div>
+      <form id="courseForm">
+        <div class="modal-body">
+          <label class="field">课程编码 *<input class="input" id="fCode" placeholder="如 CS401" /></label>
+          <label class="field">课程名称 *<input class="input" id="fName" placeholder="如 操作系统" /></label>
+          <label class="field">学分<input class="input" id="fCredit" type="number" step="0.5" value="3" /></label>
+          <p class="login-err" id="formErr" style="grid-column:1/-1"></p>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn" data-close>取消</button>
+          <button type="submit" class="btn btn-primary" id="btnSave">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireLogin, isAdmin } from './assets/js/auth.js';
+    import { api } from './assets/js/api.js';
+    import {
+      mountShell, $, $$, esc, toast, openModal, closeModal, bindMaskClose, showError,
+    } from './assets/js/ui.js';
+
+    await requireLogin();
+    const admin = isAdmin();
+    const body = mountShell({ active: 'courses', title: '课程管理', sub: '课程目录维护，成绩录入时按此选择课程' });
+
+    body.innerHTML = `
+      <div class="panel">
+        ${admin ? `<div class="toolbar">
+          <span class="hint-inline">课程编码全局唯一，删除前会校验是否已有成绩</span>
+          <span class="spacer"></span>
+          <button class="btn btn-primary" id="btnAdd">+ 新增课程</button>
+        </div>` : ''}
+        <div class="table-wrap" id="tableWrap"><div class="loading">加载中…</div></div>
+      </div>`;
+
+    let rows = [];
+
+    async function load() {
+      try {
+        rows = await api.courses();
+        if (!rows.length) {
+          $('#tableWrap').innerHTML = '<div class="empty">暂无课程</div>';
+          return;
+        }
+        $('#tableWrap').innerHTML = `
+          <table>
+            <thead><tr><th>课程编码</th><th>课程名称</th><th>学分</th>${admin ? '<th>操作</th>' : ''}</tr></thead>
+            <tbody>
+              ${rows.map((c) => `
+                <tr>
+                  <td class="mono">${esc(c.code)}</td>
+                  <td>${esc(c.name)}</td>
+                  <td class="num">${esc(c.credit)}</td>
+                  ${admin ? `<td class="row-actions">
+                    <button class="btn-link" data-edit="${c.id}">编辑</button>
+                    <button class="btn-link danger" data-del="${c.id}">删除</button>
+                  </td>` : ''}
+                </tr>`).join('')}
+            </tbody>
+          </table>`;
+
+        $$('button[data-edit]', $('#tableWrap')).forEach((b) => b.addEventListener('click', () => openEdit(Number(b.dataset.edit))));
+        $$('button[data-del]', $('#tableWrap')).forEach((b) => b.addEventListener('click', () => removeCourse(Number(b.dataset.del))));
+      } catch (e) {
+        showError($('#tableWrap'), e.message, load);
+      }
+    }
+
+    function openEdit(id) {
+      const c = rows.find((r) => r.id === id);
+      if (!c) return;
+      $('#modalTitle').textContent = `编辑课程 · ${c.name}`;
+      $('#fCode').value = c.code;
+      $('#fName').value = c.name;
+      $('#fCredit').value = c.credit;
+      $('#formErr').textContent = '';
+      $('#courseForm').dataset.id = String(id);
+      openModal('courseModal');
+    }
+
+    async function removeCourse(id) {
+      if (!confirm('确定删除该课程？')) return;
+      try {
+        await api.deleteCourse(id);
+        toast('已删除');
+        load();
+      } catch (e) {
+        toast(e.message, 'err');
+      }
+    }
+
+    $('#btnAdd')?.addEventListener('click', () => {
+      if (!admin) return;
+      $('#modalTitle').textContent = '新增课程';
+      $('#fCode').value = '';
+      $('#fName').value = '';
+      $('#fCredit').value = 3;
+      $('#formErr').textContent = '';
+      delete $('#courseForm').dataset.id;
+      openModal('courseModal');
+    });
+
+    $('#courseForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const err = $('#formErr');
+      err.textContent = '';
+
+      const payload = {
+        code: $('#fCode').value.trim(),
+        name: $('#fName').value.trim(),
+        credit: Number($('#fCredit').value),
+      };
+      if (!payload.code || !payload.name) { err.textContent = '课程编码和名称必填'; return; }
+      if (Number.isNaN(payload.credit) || payload.credit < 0) { err.textContent = '学分必须是非负数字'; return; }
+
+      const btn = $('#btnSave');
+      btn.disabled = true;
+      try {
+        const id = $('#courseForm').dataset.id;
+        if (id) {
+          await api.updateCourse(Number(id), payload);
+          toast('保存成功');
+        } else {
+          await api.createCourse(payload);
+          toast('新增成功');
+        }
+        closeModal('courseModal');
+        load();
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    $$('[data-close]').forEach((b) => b.addEventListener('click', () => closeModal('courseModal')));
+    bindMaskClose('courseModal');
+
+    load();
+  </script>
+</body>
+</html>
