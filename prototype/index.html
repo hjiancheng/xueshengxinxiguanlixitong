@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>仪表盘 · 学生信息管理系统</title>
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <!-- 侧边导航 -->
+    <aside class="sidebar">
+      <div class="brand"><span class="logo">🎓</span><span>学生信息管理系统</span></div>
+      <nav class="nav">
+        <a href="index.html" class="active"><span class="ico">▦</span>仪表盘</a>
+        <a href="students.html"><span class="ico">👥</span>学生管理</a>
+        <a href="#" title="原型未实现"><span class="ico">🏫</span>班级管理</a>
+        <a href="#" title="原型未实现"><span class="ico">📚</span>课程管理</a>
+        <a href="#" title="原型未实现"><span class="ico">📝</span>成绩管理</a>
+        <a href="#" title="原型未实现"><span class="ico">🕘</span>操作日志</a>
+      </nav>
+      <div class="sidebar-foot">
+        静态原型 v0.1<br />教育蓝 · 混合布局
+      </div>
+    </aside>
+
+    <!-- 主区域 -->
+    <div class="main">
+      <header class="topbar">
+        <div class="crumb">首页 / <b>仪表盘</b></div>
+        <div class="user">
+          <span>王老师</span>
+          <span class="badge gray">管理员</span>
+          <span class="avatar">王</span>
+        </div>
+      </header>
+
+      <main class="content">
+        <h1 class="page-title">数据概览</h1>
+        <p class="page-sub">数据更新于 2026-10-31 11:30 · 演示数据</p>
+
+        <!-- 统计卡片 -->
+        <section class="cards">
+          <div class="card stat">
+            <div class="label">学生总数</div>
+            <div class="value">213</div>
+            <div class="trend">本月新增 12 人</div>
+          </div>
+          <div class="card stat">
+            <div class="label">班级数</div>
+            <div class="value">10</div>
+            <div class="trend">覆盖 3 个院系</div>
+          </div>
+          <div class="card stat">
+            <div class="label">平均分</div>
+            <div class="value">78.5</div>
+            <div class="trend">较上学期 +2.1</div>
+          </div>
+          <div class="card stat">
+            <div class="label">及格率</div>
+            <div class="value">86.2%</div>
+            <div class="trend down">较上学期 -1.4%</div>
+          </div>
+        </section>
+
+        <div class="grid2">
+          <!-- 班级人数分布 -->
+          <div class="panel">
+            <div class="panel-head">
+              <span>各班级人数分布</span>
+              <span class="badge gray">前 6 个班级</span>
+            </div>
+            <div class="panel-body">
+              <div class="bar-row"><span class="name">计算机 1 班</span><span class="bar-track"><span class="bar-fill" style="width: 92%"></span></span><span class="val">46</span></div>
+              <div class="bar-row"><span class="name">计算机 2 班</span><span class="bar-track"><span class="bar-fill" style="width: 84%"></span></span><span class="val">42</span></div>
+              <div class="bar-row"><span class="name">软件 1 班</span><span class="bar-track"><span class="bar-fill" style="width: 78%"></span></span><span class="val">39</span></div>
+              <div class="bar-row"><span class="name">软件 2 班</span><span class="bar-track"><span class="bar-fill" style="width: 70%"></span></span><span class="val">35</span></div>
+              <div class="bar-row"><span class="name">网络 1 班</span><span class="bar-track"><span class="bar-fill" style="width: 58%"></span></span><span class="val">29</span></div>
+              <div class="bar-row"><span class="name">网络 2 班</span><span class="bar-track"><span class="bar-fill" style="width: 44%"></span></span><span class="val">22</span></div>
+            </div>
+          </div>
+
+          <!-- 成绩分布 -->
+          <div class="panel">
+            <div class="panel-head">
+              <span>成绩分布</span>
+              <span class="badge gray">全部课程</span>
+            </div>
+            <div class="panel-body">
+              <div class="bar-row"><span class="name">90–100</span><span class="bar-track"><span class="bar-fill" style="width: 28%"></span></span><span class="val">28</span></div>
+              <div class="bar-row"><span class="name">80–89</span><span class="bar-track"><span class="bar-fill" style="width: 62%"></span></span><span class="val">62</span></div>
+              <div class="bar-row"><span class="name">70–79</span><span class="bar-track"><span class="bar-fill" style="width: 74%"></span></span><span class="val">74</span></div>
+              <div class="bar-row"><span class="name">60–69</span><span class="bar-track"><span class="bar-fill" style="width: 34%"></span></span><span class="val">34</span></div>
+              <div class="bar-row"><span class="name">60 以下</span><span class="bar-track"><span class="bar-fill" style="width: 15%"></span></span><span class="val">15</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 最近操作 -->
+        <div class="panel">
+          <div class="panel-head">
+            <span>最近操作</span>
+            <a href="#" style="font-size: 13px; color: var(--primary); text-decoration: none;">查看全部 ›</a>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>时间</th><th>操作人</th><th>动作</th><th>对象</th><th>详情</th></tr>
+              </thead>
+              <tbody>
+                <tr><td class="mono">10-31 11:22</td><td>王老师</td><td><span class="badge ok">修改</span></td><td>学生 2026001</td><td>联系电话 138****0021 → 139****0033</td></tr>
+                <tr><td class="mono">10-31 10:58</td><td>李老师</td><td><span class="badge ok">录入</span></td><td>成绩 #8842</td><td>数据结构 期末 88 分</td></tr>
+                <tr><td class="mono">10-31 09:41</td><td>王老师</td><td><span class="badge warn">删除</span></td><td>学生 2025017</td><td>软删除，原因：退学</td></tr>
+                <tr><td class="mono">10-30 16:07</td><td>系统</td><td><span class="badge gray">导出</span></td><td>学生列表</td><td>导出 CSV，共 213 行</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

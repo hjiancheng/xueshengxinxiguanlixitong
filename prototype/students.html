@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>学生管理 · 学生信息管理系统</title>
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand"><span class="logo">🎓</span><span>学生信息管理系统</span></div>
+      <nav class="nav">
+        <a href="index.html"><span class="ico">▦</span>仪表盘</a>
+        <a href="students.html" class="active"><span class="ico">👥</span>学生管理</a>
+        <a href="#" title="原型未实现"><span class="ico">🏫</span>班级管理</a>
+        <a href="#" title="原型未实现"><span class="ico">📚</span>课程管理</a>
+        <a href="#" title="原型未实现"><span class="ico">📝</span>成绩管理</a>
+        <a href="#" title="原型未实现"><span class="ico">🕘</span>操作日志</a>
+      </nav>
+      <div class="sidebar-foot">静态原型 v0.1<br />教育蓝 · 混合布局</div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div class="crumb">首页 / 学生管理 / <b>学生列表</b></div>
+        <div class="user">
+          <span>王老师</span>
+          <span class="badge gray">管理员</span>
+          <span class="avatar">王</span>
+        </div>
+      </header>
+
+      <main class="content">
+        <h1 class="page-title">学生管理</h1>
+        <p class="page-sub">共 213 名学生 · 支持按姓名 / 学号搜索，按班级和状态筛选</p>
+
+        <div class="panel">
+          <!-- 工具栏 -->
+          <div class="toolbar">
+            <input id="kw" class="input" type="text" placeholder="搜索姓名或学号…" />
+            <select id="classFilter" class="select">
+              <option value="">全部班级</option>
+              <option>计算机 1 班</option>
+              <option>计算机 2 班</option>
+              <option>软件 1 班</option>
+            </select>
+            <select id="statusFilter" class="select">
+              <option value="">全部状态</option>
+              <option>在读</option>
+              <option>休学</option>
+              <option>毕业</option>
+            </select>
+            <button class="btn" id="btnReset">重置</button>
+            <span class="spacer"></span>
+            <button class="btn" id="btnExport">导出 CSV</button>
+            <button class="btn btn-primary" id="btnAdd">+ 新增学生</button>
+          </div>
+
+          <!-- 表格 -->
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>学号</th><th>姓名</th><th>性别</th><th>班级</th>
+                  <th>联系电话</th><th>入学年份</th><th>状态</th><th style="text-align: right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
+
+          <!-- 分页 -->
+          <div class="pager">
+            <span id="pagerInfo">—</span>
+            <div class="pages" id="pagerBtns"></div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- 新增 / 编辑弹窗 -->
+  <div class="mask" id="mask">
+    <div class="modal">
+      <div class="modal-head">
+        <span id="modalTitle">新增学生</span>
+        <button class="modal-close" id="btnClose">×</button>
+      </div>
+      <div class="modal-body">
+        <label class="field">学号 <input id="fNo" placeholder="如 2026001" /></label>
+        <label class="field">姓名 <input id="fName" placeholder="如 张三" /></label>
+        <label class="field">性别
+          <select id="fGender"><option>男</option><option>女</option></select>
+        </label>
+        <label class="field">班级
+          <select id="fClass">
+            <option>计算机 1 班</option><option>计算机 2 班</option><option>软件 1 班</option>
+          </select>
+        </label>
+        <label class="field">联系电话 <input id="fPhone" placeholder="11 位手机号" /></label>
+        <label class="field">入学年份 <input id="fYear" placeholder="如 2026" /></label>
+        <label class="field full">状态
+          <select id="fStatus"><option>在读</option><option>休学</option><option>毕业</option></select>
+        </label>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="btnCancel">取消</button>
+        <button class="btn btn-primary" id="btnSave">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">操作成功</div>
+
+  <script>
+    // ===== 演示数据（真实系统里来自后端接口）=====
+    let students = [
+      { id: 1, no: '2026001', name: '张三', gender: '男', cls: '计算机 1 班', phone: '13800000001', year: 2026, status: '在读' },
+      { id: 2, no: '2026002', name: '李四', gender: '女', cls: '计算机 1 班', phone: '13800000002', year: 2026, status: '在读' },
+      { id: 3, no: '2026003', name: '王五', gender: '男', cls: '计算机 2 班', phone: '13800000003', year: 2026, status: '在读' },
+      { id: 4, no: '2026004', name: '赵六', gender: '女', cls: '计算机 2 班', phone: '13800000004', year: 2026, status: '休学' },
+      { id: 5, no: '2026005', name: '孙七', gender: '男', cls: '软件 1 班', phone: '13800000005', year: 2026, status: '在读' },
+      { id: 6, no: '2025006', name: '周八', gender: '女', cls: '软件 1 班', phone: '13800000006', year: 2025, status: '在读' },
+      { id: 7, no: '2025007', name: '吴九', gender: '男', cls: '计算机 1 班', phone: '13800000007', year: 2025, status: '在读' },
+      { id: 8, no: '2025008', name: '郑十', gender: '女', cls: '计算机 2 班', phone: '13800000008', year: 2025, status: '毕业' },
+      { id: 9, no: '2025009', name: '冯十一', gender: '男', cls: '软件 1 班', phone: '13800000009', year: 2025, status: '在读' },
+      { id: 10, no: '2025010', name: '陈十二', gender: '女', cls: '计算机 1 班', phone: '13800000010', year: 2025, status: '在读' },
+      { id: 11, no: '2025011', name: '褚十三', gender: '男', cls: '计算机 2 班', phone: '13800000011', year: 2025, status: '休学' },
+      { id: 12, no: '2025012', name: '卫十四', gender: '女', cls: '软件 1 班', phone: '13800000012', year: 2025, status: '在读' }
+    ];
+
+    const state = { page: 1, size: 5, kw: '', cls: '', status: '', editingId: null };
+
+    const $ = (id) => document.getElementById(id);
+    const tbody = $('tbody');
+    const toastEl = $('toast');
+
+    function filtered() {
+      return students.filter((s) => {
+        const hitKw = !state.kw || s.name.includes(state.kw) || s.no.includes(state.kw);
+        const hitCls = !state.cls || s.cls === state.cls;
+        const hitStatus = !state.status || s.status === state.status;
+        return hitKw && hitCls && hitStatus;
+      });
+    }
+
+    function badge(status) {
+      if (status === '在读') return '<span class="badge ok">在读</span>';
+      if (status === '休学') return '<span class="badge warn">休学</span>';
+      return '<span class="badge gray">毕业</span>';
+    }
+
+    function render() {
+      const list = filtered();
+      const totalPages = Math.max(1, Math.ceil(list.length / state.size));
+      if (state.page > totalPages) state.page = totalPages;
+      const start = (state.page - 1) * state.size;
+      const rows = list.slice(start, start + state.size);
+
+      tbody.innerHTML = rows.length
+        ? rows.map((s) => `
+          <tr>
+            <td class="mono">${s.no}</td>
+            <td><b>${s.name}</b></td>
+            <td>${s.gender}</td>
+            <td>${s.cls}</td>
+            <td class="mono">${s.phone}</td>
+            <td>${s.year}</td>
+            <td>${badge(s.status)}</td>
+            <td style="text-align: right">
+              <button class="btn btn-sm" data-edit="${s.id}">编辑</button>
+              <button class="btn btn-sm btn-danger" data-del="${s.id}">删除</button>
+            </td>
+          </tr>`).join('')
+        : '<tr><td colspan="8"><div class="empty">没有找到符合条件的学生</div></td></tr>';
+
+      $('pagerInfo').textContent = `共 ${list.length} 条，第 ${state.page} / ${totalPages} 页`;
+
+      let btns = '';
+      for (let i = 1; i <= totalPages; i++) {
+        btns += `<button class="${i === state.page ? 'active' : ''}" data-page="${i}">${i}</button>`;
+      }
+      $('pagerBtns').innerHTML = btns;
+    }
+
+    function toast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add('show');
+      setTimeout(() => toastEl.classList.remove('show'), 1800);
+    }
+
+    function openModal(student) {
+      state.editingId = student ? student.id : null;
+      $('modalTitle').textContent = student ? '编辑学生' : '新增学生';
+      $('fNo').value = student ? student.no : '';
+      $('fName').value = student ? student.name : '';
+      $('fGender').value = student ? student.gender : '男';
+      $('fClass').value = student ? student.cls : '计算机 1 班';
+      $('fPhone').value = student ? student.phone : '';
+      $('fYear').value = student ? student.year : 2026;
+      $('fStatus').value = student ? student.status : '在读';
+      $('mask').classList.add('show');
+    }
+
+    // 事件绑定
+    $('kw').addEventListener('input', (e) => { state.kw = e.target.value.trim(); state.page = 1; render(); });
+    $('classFilter').addEventListener('change', (e) => { state.cls = e.target.value; state.page = 1; render(); });
+    $('statusFilter').addEventListener('change', (e) => { state.status = e.target.value; state.page = 1; render(); });
+    $('btnReset').addEventListener('click', () => {
+      state.kw = ''; state.cls = ''; state.status = ''; state.page = 1;
+      $('kw').value = ''; $('classFilter').value = ''; $('statusFilter').value = '';
+      render();
+    });
+
+    $('btnAdd').addEventListener('click', () => openModal(null));
+    $('btnClose').addEventListener('click', () => $('mask').classList.remove('show'));
+    $('btnCancel').addEventListener('click', () => $('mask').classList.remove('show'));
+    $('mask').addEventListener('click', (e) => { if (e.target.id === 'mask') $('mask').classList.remove('show'); });
+
+    $('btnSave').addEventListener('click', () => {
+      const no = $('fNo').value.trim();
+      const name = $('fName').value.trim();
+      if (!no || !name) { toast('学号和姓名不能为空'); return; }
+
+      const data = {
+        no, name,
+        gender: $('fGender').value,
+        cls: $('fClass').value,
+        phone: $('fPhone').value.trim(),
+        year: $('fYear').value.trim(),
+        status: $('fStatus').value
+      };
+
+      if (state.editingId) {
+        const idx = students.findIndex((s) => s.id === state.editingId);
+        students[idx] = { ...students[idx], ...data };
+        toast('修改成功');
+      } else {
+        students.unshift({ id: Date.now(), ...data });
+        toast('新增成功');
+      }
+      $('mask').classList.remove('show');
+      render();
+    });
+
+    tbody.addEventListener('click', (e) => {
+      const editId = e.target.dataset.edit;
+      const delId = e.target.dataset.del;
+      if (editId) {
+        openModal(students.find((s) => s.id === Number(editId)));
+      }
+      if (delId) {
+        const s = students.find((x) => x.id === Number(delId));
+        if (confirm(`确定删除学生「${s.name}」吗？真实系统为软删除并记录日志。`)) {
+          students = students.filter((x) => x.id !== Number(delId));
+          toast('已删除（演示：软删除）');
+          render();
+        }
+      }
+    });
+
+    $('pagerBtns').addEventListener('click', (e) => {
+      const p = e.target.dataset.page;
+      if (p) { state.page = Number(p); render(); }
+    });
+
+    $('btnExport').addEventListener('click', () => toast('演示：导出 CSV（真实系统由后端生成）'));
+
+    render();
+  </script>
+</body>
+</html>

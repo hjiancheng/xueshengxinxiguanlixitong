@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>登录 · 学生信息管理系统</title>
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="brand"><span class="logo">🎓</span><span>学生信息管理系统</span></div>
+      <h2>欢迎回来</h2>
+      <p class="sub">请使用教务账号登录</p>
+
+      <label class="field">用户名
+        <input id="username" type="text" placeholder="请输入用户名" value="admin" />
+      </label>
+      <label class="field">密码
+        <input id="password" type="password" placeholder="请输入密码" value="123456" />
+      </label>
+      <label class="field">角色
+        <select id="role">
+          <option value="admin">管理员（全部数据）</option>
+          <option value="teacher">教师（仅本班数据）</option>
+        </select>
+      </label>
+
+      <button class="btn btn-primary" id="btnLogin">登 录</button>
+
+      <p class="hint">
+        演示账号：admin / 123456（管理员）<br />
+        教师账号：teacher / 123456（仅本班）
+      </p>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('btnLogin').addEventListener('click', function () {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value.trim();
+      if (!username || !password) {
+        alert('请输入用户名和密码');
+        return;
+      }
+      // 原型阶段：不做真实校验，直接进入仪表盘
+      window.location.href = 'index.html';
+    });
+
+    document.getElementById('password').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') document.getElementById('btnLogin').click();
+    });
+  </script>
+</body>
+</html>
